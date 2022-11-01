@@ -1,3 +1,5 @@
+[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+
 # lightning-template
 This repository contains a template that can be used to create new models using the Lightning Framework.
 
