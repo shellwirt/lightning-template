@@ -14,3 +14,11 @@ For installing the required packages with **conda**, please run the following co
 ```
 conda install --file conda-requirements.txt
 ```
+
+## Running the template
+
+Since this template is fully functional, there's no prerequisites for this code to run. Simply run the following command:
+
+```
+python template.py
+```
