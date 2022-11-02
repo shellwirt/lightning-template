@@ -160,8 +160,16 @@ class LitNeuralModel(pl.LightningModule):
             self.learning_model.parameters(), lr=self.learning_rate
         )
 
-        # Returns optimizer to the Trainer
-        return [optimizer]
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
+
+        # Returns optimizer and scheduler configuration to the Trainer
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {
+                "scheduler": scheduler,
+                "monitor": "internal_valid_loss",
+            },
+        }
 
 
 # Load features and labels from Sklearn's California Housing Dataset
@@ -192,7 +200,7 @@ model_checkpoint = ModelCheckpoint(
 trainer = pl.Trainer(
     deterministic=True,
     log_every_n_steps=1,
-    max_epochs=10000,
+    max_epochs=-1,
     callbacks=[early_stopping, model_checkpoint],
 )
 
