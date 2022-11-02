@@ -39,7 +39,7 @@ from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
 from pytorch_lightning.utilities.seed import seed_everything
 from sklearn.datasets import fetch_california_housing
 from pl_bolts.datamodules import SklearnDataModule
-from torchmetrics import MetricCollection, MeanAbsoluteError, MeanSquaredError
+from torchmetrics import MetricCollection, MeanAbsoluteError, MeanSquaredError, R2Score
 
 
 class LitNeuralModel(pl.LightningModule):
@@ -62,7 +62,7 @@ class LitNeuralModel(pl.LightningModule):
         self.batch_size = batch_size
 
         # Define metrics that will be logged
-        metrics = MetricCollection([MeanAbsoluteError(), MeanSquaredError()])
+        metrics = MetricCollection([MeanAbsoluteError(), MeanSquaredError(), R2Score()])
 
         # Define training metrics with prefix
         self.train_metrics = metrics.clone(prefix="train_")
@@ -105,9 +105,6 @@ class LitNeuralModel(pl.LightningModule):
 
         # Save calculated metrics to disk
         self.log_dict(output)
-
-        # Save the loss metric for internal monitoring and debugging purposes
-        self.log("internal_training_loss", loss)
 
         # NOTE: In this case, we are allowed to return the loss to the model to
         # the Trainer, since doing so we'll update the model state.
