@@ -30,14 +30,13 @@ OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 """
 
-import random
-
 import torch
-import numpy as np
 from torch import nn
 import pytorch_lightning as pl
 import torch.nn.functional as F
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
+from pytorch_lightning.callbacks.model_checkpoint import ModelCheckpoint
+from pytorch_lightning.utilities.seed import seed_everything
 from sklearn.datasets import fetch_california_housing
 from pl_bolts.datamodules import SklearnDataModule
 from torchmetrics import MetricCollection, MeanAbsoluteError, MeanSquaredError
@@ -50,7 +49,7 @@ class LitNeuralModel(pl.LightningModule):
     on the classes that this class overrides.
     """
 
-    def __init__(self, learning_model, learning_rate):
+    def __init__(self, learning_rate=1e-2, batch_size=32):
         """Initializes the Model with required parameters."""
 
         # Performs initialization
@@ -59,8 +58,8 @@ class LitNeuralModel(pl.LightningModule):
         # Saves learning rate as a internal parameter of the class
         self.learning_rate = learning_rate
 
-        # Saves model as a internal parameter of the class
-        self.learning_model = learning_model
+        # Saves batch size as a internal parameter of the class
+        self.batch_size = batch_size
 
         # Define metrics that will be logged
         metrics = MetricCollection([MeanAbsoluteError(), MeanSquaredError()])
@@ -74,8 +73,20 @@ class LitNeuralModel(pl.LightningModule):
         # Define test metrics with prefix
         self.test_metrics = metrics.clone(prefix="test_")
 
+        # Defines sequential architecture
+        self.learning_model = nn.Sequential(nn.Linear(8, 1))
+
         # Saves all hyperparameters to be logged by internal logging functionality
         self.save_hyperparameters(ignore=["learning_model"])
+
+    # Forward method that runs the model
+    def forward(self, X):
+
+        # Feeds model to return the prediction
+        out = self.neural(X)
+
+        # Returns the prediction
+        return out
 
     def training_step(self, batch, batch_idx):
         """Defines the training step to feed the model and calculate loss."""
@@ -148,44 +159,12 @@ class LitNeuralModel(pl.LightningModule):
         """Initialize optimizers that will be used for training the model."""
 
         # Initialize Adam optimizer for automaticaly updating the learning rate
-        optimizer = torch.optim.Adam(
-            self.learning_model.parameters(), lr=self.learning_rate, weight_decay=2
+        optimizer = torch.optim.LBFGS(
+            self.learning_model.parameters(), lr=self.learning_rate
         )
 
-        # Initialize the Step scheduler for changing the learning rate throughout training.
-        lr_scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=100)
-
-        # Returns optimizer and learning scheduler to the Trainer
-        return [optimizer], [lr_scheduler]
-
-
-class NeuralNetwork(nn.Module):
-    """Linear Regression with Sequential Model.
-
-    A fully connected sequential model with Linear Regression.
-
-    NOTE: Before running the model, it is required to validate the input dimension
-    for proper training.
-
-    """
-
-    # Initialize the class with the Sequential Model
-    def __init__(self):
-
-        # Performs the class initialization
-        super(NeuralNetwork, self).__init__()
-
-        # Defines sequential architecture
-        self.linear = nn.Sequential(nn.Linear(8, 1))
-
-    # Forward method that runs the model
-    def forward(self, X):
-
-        # Feeds model to return the prediction
-        out = self.linear(X)
-
-        # Returns the prediction
-        return out
+        # Returns optimizer to the Trainer
+        return [optimizer]
 
 
 # Load features and labels from Sklearn's California Housing Dataset
@@ -195,64 +174,57 @@ X, y = fetch_california_housing(return_X_y=True)
 # but a n-dimensional tensor with 1 label per tensor
 y = y.reshape(len(y), 1)
 
-# Load features and labels in DataModule
-loaders = SklearnDataModule(X, y, batch_size=500)
-
-# Initialize training loader
-train_loader = loaders.train_dataloader()
-
-# Initialize validation loader
-val_loader = loaders.val_dataloader()
-
-# Initialize testing loader
-test_loader = loaders.test_dataloader()
-
 # NOTE: This section contains code that defines the reproducibility of the model
 # and is not meant to be changed unless the model expresses erractic behavior.
 
 # Defines the RNG seed to be used by all the libraries
-manual_seed = 0
-
-# Set Python's random seed to make sure that any core operator is deterministic
-random.seed(manual_seed)
-
-# Set NumPy's random seed to make sure that any library operator is deterministic
-np.random.seed(manual_seed)
-
-# Set Pytorch's to only use a manually defined seed for all devices
-torch.manual_seed(manual_seed)
+seed_everything(0)
 
 # Set PyTorch's to only use deterministic algorithms
 torch.use_deterministic_algorithms(True)
 
-# Initialize trainer for initial learning rate tuner
-tune_trainer = pl.Trainer(auto_lr_find=True, log_every_n_steps=1, deterministic=True)
+# Define the Early Stopping method for stopping trainings
+early_stopping = EarlyStopping(monitor="internal_valid_loss", mode="min", patience=10)
 
-# Find the optimal initial learning rate for the model
-lr_suggestion = tune_trainer.tuner.lr_find(
-    LitNeuralModel(NeuralNetwork(), learning_rate=1e-2),
-    train_dataloaders=train_loader,
-    val_dataloaders=val_loader,
+# Define the model checkpoint callback for testing with multiple models
+model_checkpoint = ModelCheckpoint(
+    monitor="internal_valid_loss", mode="min", save_top_k=10, save_last=True
 )
 
-# Initialize the Neural Model with the optimal initial learning rate
-neuralmodel = LitNeuralModel(
-    learning_model=NeuralNetwork(), learning_rate=lr_suggestion.suggestion()
-)
-
-# Initialize the model trainer which feeds the model
+# Initialize trainer for initial learning rate tuner and batch size finder
 trainer = pl.Trainer(
-    log_every_n_steps=1,
-    max_epochs=1000,
     deterministic=True,
-    callbacks=[
-        # Define the Early Stopping method for stopping trainings
-        EarlyStopping(monitor="internal_valid_loss", mode="min", patience=5),
-    ],
+    log_every_n_steps=1,
+    max_epochs=10000,
+    callbacks=[early_stopping, model_checkpoint],
 )
+
+# Initialize tuner for finding the optimal batch size
+batchSuggestion = trainer.tuner.scale_batch_size(
+    LitNeuralModel(), SklearnDataModule(X, y)
+)
+
+# Initialize tuner for finding the optimal learning rate
+learningRate = trainer.tuner.lr_find(
+    LitNeuralModel(), SklearnDataModule(X, y, batch_size=batchSuggestion)
+)
+
+# Initialize model with suggested parameters
+neuralModel = LitNeuralModel(
+    learning_rate=learningRate.suggestion(), batch_size=batchSuggestion
+)
+
+# Initialize data module with suggested parameters
+dataModule = SklearnDataModule(X, y, batch_size=batchSuggestion)
+
+# Tune the Neural Model with the optimal initial learning rate and batch size
+trainer.tune(neuralModel, dataModule)
 
 # Fits the model with the training and validation data
-trainer.fit(model=neuralmodel, datamodule=loaders)
+trainer.fit(neuralModel, dataModule)
 
-# Validates model generalization with the test data
-trainer.test(neuralmodel, datamodule=loaders)
+# Load the best model checkpoint with the holdout test data
+trainer.test(
+    model=neuralModel.load_from_checkpoint(model_checkpoint.best_model_path),
+    datamodule=dataModule,
+)
