@@ -153,13 +153,14 @@ class LitNeuralModel(pl.LightningModule):
         self.log("internal_valid_loss", loss)
 
     def configure_optimizers(self):
-        """Initialize optimizers that will be used for training the model."""
+        """Initialize optimizer and scheduler that will be used for training the model."""
 
-        # Initialize Adam optimizer for automaticaly updating the learning rate
+        # Initialize LBFGS optimizer
         optimizer = torch.optim.LBFGS(
             self.learning_model.parameters(), lr=self.learning_rate
         )
 
+        # Initialize ReduceLROnPlateau scheduler
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, "min")
 
         # Returns optimizer and scheduler configuration to the Trainer
