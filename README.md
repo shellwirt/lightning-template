@@ -4,6 +4,14 @@
 # lightning-template
 This repository contains a template that can be used to create new models using the Lightning Framework.
 
+## Template Features
+- Early Stopping Policy.
+- Model Checkpoint saving top ten trained models based on holdout data.
+- Learning Rate Finder and Batch Size Finder with automatic saving for model training.
+- MSE, MAE, R2 metrics saved to local Tensorboard for training and holdout data.
+- ReduceLROnPlateau as learning rate scheduler and LBFGS optimizer.
+- Reproducibility Policy with deterministic algorithms only.
+
 ## Requirements
 
 For installing the required packages with **pip**, please run the following command:
