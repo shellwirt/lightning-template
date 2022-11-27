@@ -20,15 +20,9 @@ For installing the required packages with **pip**, please run the following comm
 pip install -r pip-requirements.txt
 ```
 
-For installing the required packages with **conda**, please run the following command:
-
-```
-conda install --file conda-requirements.txt
-```
-
 ## Running the template
 
-Since this template is fully functional, there's no prerequisites for this code to run. Simply run the following command:
+Since this template is fully functional, there's no pre-requisites for this code to run. Simply run the following command:
 
 ```
 python template.py
